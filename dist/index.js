@@ -5,6 +5,8 @@ import ora from "ora";
 import chalk from "chalk";
 import { checkSystem } from "./system-check.js";
 import { getProjectName } from "./prompts.js";
+import { fileURLToPath } from "url";
+import path from "path";
 const program = new Command();
 program
     .name("create-kaeyros-app")
@@ -71,25 +73,47 @@ program
     const spinner = ora("Téléchargement des templates...").start();
     try {
         const fs = await import("fs/promises");
-        const path = await import("path");
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const templatesDir = path.join(__dirname, "templates");
         const rootDir = process.cwd();
-        const templatesDir = path.join(rootDir, "templates");
+        async function ensurePathExists(p, label) {
+            try {
+                await fs.access(p);
+                return true;
+            }
+            catch {
+                spinner.fail("Échec du scaffolding.");
+                console.error(chalk.red(`\n❌ Template manquant : ${label}\n  Chemin introuvable : ${p}\n\n` +
+                    `Veuillez vous assurer que le CLI contient le dossier "templates" :\n` +
+                    `  ${chalk.bold(templatesDir)}\n` +
+                    `  Et le template "${label}".\n` +
+                    `  Si ce problème persiste, il s'agit probablement d'un problème de packaging dans la publication npm.\n`));
+                process.exit(1);
+            }
+        }
         if (mode === "fullstack") {
             const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
             const backendSrc = path.join(templatesDir, "nestjs-starter-template");
             const frontendDest = path.join(rootDir, projectName, "frontend");
             const backendDest = path.join(rootDir, projectName, "backend");
+            await Promise.all([
+                ensurePathExists(frontendSrc, "nextjs-starter-template"),
+                ensurePathExists(backendSrc, "nestjs-starter-template"),
+            ]);
             await fs.cp(frontendSrc, frontendDest, { recursive: true });
             await fs.cp(backendSrc, backendDest, { recursive: true });
         }
         else if (mode === "frontend") {
             const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
             const frontendDest = path.join(rootDir, projectName);
+            await ensurePathExists(frontendSrc, "nextjs-starter-template");
             await fs.cp(frontendSrc, frontendDest, { recursive: true });
         }
         else if (mode === "backend") {
             const backendSrc = path.join(templatesDir, "nestjs-starter-template");
             const backendDest = path.join(rootDir, projectName);
+            await ensurePathExists(backendSrc, "nestjs-starter-template");
             await fs.cp(backendSrc, backendDest, { recursive: true });
         }
         spinner.succeed("Templates téléchargés avec succès !");
@@ -107,7 +131,18 @@ program
     }
     catch (error) {
         spinner.fail("Échec du scaffolding.");
-        console.error(error);
+        if (typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "ENOENT" &&
+            "path" in error) {
+            console.error(chalk.red(`❌ Fichier ou dossier introuvable : ${error.path}\n` +
+                `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (voir publication npm).\n` +
+                `  Par exemple :\n    ${chalk.bold("templates/nextjs-starter-template")}\n    ${chalk.bold("templates/nestjs-starter-template")}\n`));
+        }
+        else {
+            console.error(error);
+        }
         process.exit(1);
     }
 });
