@@ -4,7 +4,9 @@ import { installDependencies } from "./install.js";
 import ora from "ora";
 import chalk from "chalk";
 import { checkSystem } from "./system-check.js";
-import { getProjectName } from "./prompts.js"; // MAJ : import de la nouvelle fonction getProjectName
+import { getProjectName } from "./prompts.js";
+import { fileURLToPath } from "url";
+import path from "path";
 
 const program = new Command();
 
@@ -57,7 +59,6 @@ program
           `\n⚠️  "${options.pkgm}" n'est pas un gestionnaire reconnu. Utilisation de "${sys.detectedPkgm}".`,
         ),
       );
-
       pkgm = sys.detectedPkgm;
     } else {
       pkgm = sys.detectedPkgm;
@@ -100,7 +101,6 @@ program
     } else if (options.fullstack) {
       mode = "fullstack";
     }
-    // Si plusieurs options sont fournies, priorité à fullstack > frontend > backend (déjà respecté)
 
     console.log(
       `\n🚀 Initialisation de ${chalk.bold(projectName)} en mode ${chalk.bold(mode)}...`,
@@ -116,29 +116,59 @@ program
 
     try {
       const fs = await import("fs/promises");
-      const path = await import("path");
 
-      // Résout le chemin absolu du dossier courant
+      // Récupère le chemin du dossier du module CLI (peu importe d'où il est exécuté)
+      // __dirname pour modules ES
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+
+      // Notre dossier templates doit être dans le repo, à côté du code CLI (non pas dans le cwd de l'utilisateur)
+      const templatesDir = path.join(__dirname, "templates");
       const rootDir = process.cwd();
-      const templatesDir = path.join(rootDir, "templates");
+
+      // Vérification de l'existence des templates requis
+      async function ensurePathExists(p: string, label: string) {
+        try {
+          await fs.access(p);
+          return true;
+        } catch {
+          spinner.fail("Échec du scaffolding.");
+          console.error(
+            chalk.red(
+              `\n❌ Template manquant : ${label}\n  Chemin introuvable : ${p}\n\n` +
+                `Veuillez vous assurer que le CLI contient le dossier "templates" :\n` +
+                `  ${chalk.bold(templatesDir)}\n` +
+                `  Et le template "${label}".\n` +
+                `  Si ce problème persiste, il s'agit probablement d'un problème de packaging dans la publication npm.\n`,
+            ),
+          );
+          process.exit(1);
+        }
+      }
 
       if (mode === "fullstack") {
-        // Copie le template Next.js dans frontend et NestJS dans backend
         const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
         const backendSrc = path.join(templatesDir, "nestjs-starter-template");
         const frontendDest = path.join(rootDir, projectName, "frontend");
         const backendDest = path.join(rootDir, projectName, "backend");
+
+        await Promise.all([
+          ensurePathExists(frontendSrc, "nextjs-starter-template"),
+          ensurePathExists(backendSrc, "nestjs-starter-template"),
+        ]);
         await fs.cp(frontendSrc, frontendDest, { recursive: true });
         await fs.cp(backendSrc, backendDest, { recursive: true });
       } else if (mode === "frontend") {
-        // Copie uniquement le template Next.js
         const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
         const frontendDest = path.join(rootDir, projectName);
+
+        await ensurePathExists(frontendSrc, "nextjs-starter-template");
         await fs.cp(frontendSrc, frontendDest, { recursive: true });
       } else if (mode === "backend") {
-        // Copie uniquement le template NestJS
         const backendSrc = path.join(templatesDir, "nestjs-starter-template");
         const backendDest = path.join(rootDir, projectName);
+
+        await ensurePathExists(backendSrc, "nestjs-starter-template");
         await fs.cp(backendSrc, backendDest, { recursive: true });
       }
 
@@ -157,10 +187,26 @@ program
           );
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       spinner.fail("Échec du scaffolding.");
-      console.error(error);
-
+      // Gestion d’erreur plus lisible pour les erreurs de fs/promises
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "ENOENT" &&
+        "path" in error
+      ) {
+        console.error(
+          chalk.red(
+            `❌ Fichier ou dossier introuvable : ${(error as any).path}\n` +
+              `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (voir publication npm).\n` +
+              `  Par exemple :\n    ${chalk.bold("templates/nextjs-starter-template")}\n    ${chalk.bold("templates/nestjs-starter-template")}\n`,
+          ),
+        );
+      } else {
+        console.error(error);
+      }
       process.exit(1);
     }
   });
