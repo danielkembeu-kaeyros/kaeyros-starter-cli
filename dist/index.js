@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { downloadTemplate } from "./download.js";
 import { installDependencies } from "./install.js";
 import ora from "ora";
 import chalk from "chalk";
 import { checkSystem } from "./system-check.js";
-import env from "./env.js";
+import { getProjectName } from "./prompts.js";
 const program = new Command();
 program
     .name("create-kaeyros-app")
@@ -16,7 +15,7 @@ program
     .option("-b, --backend", "Mode Backend uniquement (NestJS)")
     .option("--pkgm <manager>", "Gestionnaire de paquets (pnpm, npm, yarn, bun)", "pnpm")
     .option("-i, --install", "Installer les dépendances immédiatement", false)
-    .action(async (projectName, options) => {
+    .action(async (_projectName, options) => {
     const sys = checkSystem();
     if (!sys.detectedPkgm) {
         console.error(chalk.red("\n❌ Erreur critique : Aucun gestionnaire de paquets détecté."));
@@ -46,9 +45,13 @@ program
         console.error(chalk.red(`❌ Vous avez demandé 'npm' mais il n'est pas installé.`));
         process.exit(1);
     }
+    let projectName = _projectName;
     if (!projectName) {
-        console.error(chalk.red("❌ Le nom du projet est requis."));
-        process.exit(1);
+        projectName = await getProjectName();
+        if (!projectName) {
+            console.error(chalk.red("❌ Le nom du projet est requis."));
+            process.exit(1);
+        }
     }
     let mode = "fullstack";
     if (options.frontend && !options.backend && !options.fullstack) {
@@ -67,15 +70,27 @@ program
     }
     const spinner = ora("Téléchargement des templates...").start();
     try {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const rootDir = process.cwd();
+        const templatesDir = path.join(rootDir, "templates");
         if (mode === "fullstack") {
-            await downloadTemplate(env.frontendUrl, `${projectName}/frontend`);
-            await downloadTemplate(env.backendUrl, `${projectName}/backend`);
+            const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
+            const backendSrc = path.join(templatesDir, "nestjs-starter-template");
+            const frontendDest = path.join(rootDir, projectName, "frontend");
+            const backendDest = path.join(rootDir, projectName, "backend");
+            await fs.cp(frontendSrc, frontendDest, { recursive: true });
+            await fs.cp(backendSrc, backendDest, { recursive: true });
         }
         else if (mode === "frontend") {
-            await downloadTemplate(env.frontendUrl, projectName);
+            const frontendSrc = path.join(templatesDir, "nextjs-starter-template");
+            const frontendDest = path.join(rootDir, projectName);
+            await fs.cp(frontendSrc, frontendDest, { recursive: true });
         }
         else if (mode === "backend") {
-            await downloadTemplate(env.backendUrl, projectName);
+            const backendSrc = path.join(templatesDir, "nestjs-starter-template");
+            const backendDest = path.join(rootDir, projectName);
+            await fs.cp(backendSrc, backendDest, { recursive: true });
         }
         spinner.succeed("Templates téléchargés avec succès !");
         if (options.install) {
