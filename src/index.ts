@@ -8,6 +8,11 @@ import { getProjectName } from "./prompts.js";
 import { fileURLToPath } from "url";
 import path from "path";
 
+// NOTE IMPORTANTE : Ce fichier ne gère PAS la copie du dossier "templates" dans "dist".
+// Il FAUT que le dossier "templates" soit copié manuellement ou via un script (ex: post-build) 
+// dans le dossier "dist" lors du build/publication. (Ex : scripts/copy-templates.js ou équivalent.)
+// Ce fichier suppose que templates/ est bien présent dans le même dossier que index.js compilé (dist/templates).
+
 const program = new Command();
 
 program
@@ -122,7 +127,7 @@ program
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = path.dirname(__filename);
 
-      // Notre dossier templates doit être dans le repo, à côté du code CLI (non pas dans le cwd de l'utilisateur)
+      // Ici on suppose que templates/ est bien copié dans dist/ lors du build
       const templatesDir = path.join(__dirname, "templates");
       const rootDir = process.cwd();
 
@@ -136,10 +141,10 @@ program
           console.error(
             chalk.red(
               `\n❌ Template manquant : ${label}\n  Chemin introuvable : ${p}\n\n` +
-                `Veuillez vous assurer que le CLI contient le dossier "templates" :\n` +
+                `Vérifiez que le CLI publié contient bien le dossier "templates" dans le dossier "dist" :\n` +
                 `  ${chalk.bold(templatesDir)}\n` +
                 `  Et le template "${label}".\n` +
-                `  Si ce problème persiste, il s'agit probablement d'un problème de packaging dans la publication npm.\n`,
+                `  Si ce problème persiste, il s'agit d'un oubli de packaging lors du build/npm publish.\n`,
             ),
           );
           process.exit(1);
@@ -200,7 +205,7 @@ program
         console.error(
           chalk.red(
             `❌ Fichier ou dossier introuvable : ${(error as any).path}\n` +
-              `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (voir publication npm).\n` +
+              `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (dans dist/templates).\n` +
               `  Par exemple :\n    ${chalk.bold("templates/nextjs-starter-template")}\n    ${chalk.bold("templates/nestjs-starter-template")}\n`,
           ),
         );

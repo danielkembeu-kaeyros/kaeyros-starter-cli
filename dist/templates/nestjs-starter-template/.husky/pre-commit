@@ -1,0 +1,8 @@
+# Run lint-staged for staged files only
+npx lint-staged
+
+# Run build to ensure code compiles
+npm run build || {
+  echo "❌ Build failed. Please fix the errors before committing."
+  exit 1
+}

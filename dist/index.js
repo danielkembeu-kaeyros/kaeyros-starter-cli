@@ -85,10 +85,10 @@ program
             catch {
                 spinner.fail("Échec du scaffolding.");
                 console.error(chalk.red(`\n❌ Template manquant : ${label}\n  Chemin introuvable : ${p}\n\n` +
-                    `Veuillez vous assurer que le CLI contient le dossier "templates" :\n` +
+                    `Vérifiez que le CLI publié contient bien le dossier "templates" dans le dossier "dist" :\n` +
                     `  ${chalk.bold(templatesDir)}\n` +
                     `  Et le template "${label}".\n` +
-                    `  Si ce problème persiste, il s'agit probablement d'un problème de packaging dans la publication npm.\n`));
+                    `  Si ce problème persiste, il s'agit d'un oubli de packaging lors du build/npm publish.\n`));
                 process.exit(1);
             }
         }
@@ -137,7 +137,7 @@ program
             error.code === "ENOENT" &&
             "path" in error) {
             console.error(chalk.red(`❌ Fichier ou dossier introuvable : ${error.path}\n` +
-                `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (voir publication npm).\n` +
+                `  Veuillez vérifier que les templates nécessaires existent bien dans le CLI publié (dans dist/templates).\n` +
                 `  Par exemple :\n    ${chalk.bold("templates/nextjs-starter-template")}\n    ${chalk.bold("templates/nestjs-starter-template")}\n`));
         }
         else {

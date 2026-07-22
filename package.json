@@ -1,6 +1,6 @@
 {
   "name": "create-kaeyros-app",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "CLI officiel pour les starters Kaeyros (NestJS & Next.js)",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && node ./dist/post-build.js"
   },
   "dependencies": {
     "chalk": "^5.3.0",

@@ -1,0 +1,349 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum AccountKind {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum LoginMethod {
+  PASSWORD
+  OTP
+  BOTH
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+model Account {
+  id                  String      @id @default(uuid())
+  email               String      @unique
+  password            String
+  kind                AccountKind @default(USER)
+  isActive            Boolean     @default(true)
+  isEmailVerified     Boolean     @default(false)
+  emailVerifiedAt     DateTime?
+  mustChangePassword  Boolean     @default(false)
+  passwordChangedAt   DateTime?
+  loginMethod         LoginMethod @default(PASSWORD)
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int         @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  deletedAt           DateTime?
+  createdBy           String?
+  updatedBy           String?
+  deletedBy           String?
+
+  profile            Profile?
+  refreshTokens      RefreshToken[]
+  passwordResets     PasswordReset[]
+  emailVerifications EmailVerification[]
+  accountRoles       AccountRole[]
+  auditLogs          AuditLog[]          @relation("ActorAccount")
+  files              File[]
+  loginOtps          LoginOtp[]
+
+  @@index([email])
+  @@index([kind])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("accounts")
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  accountId String   @unique
+  firstName String?
+  lastName  String?
+  phone     String?
+  avatar    String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ---------------------------------------------------------------------------
+// RBAC
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isSystem    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdBy   String?
+
+  permissions RolePermission[]
+  accounts    AccountRole[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  resource    String
+  action      String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+
+  @@index([name])
+  @@index([resource])
+  @@map("permissions")
+}
+
+model AccountRole {
+  id        String   @id @default(uuid())
+  accountId String
+  roleId    String
+  grantedBy String?
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, roleId])
+  @@index([accountId])
+  @@index([roleId])
+  @@map("account_roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Auth tokens
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id           String    @id @default(uuid())
+  accountId    String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @unique
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  accountId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
+
+model EmailVerification {
+  id        String    @id @default(uuid())
+  accountId String
+  code      String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("email_verifications")
+}
+
+// ---------------------------------------------------------------------------
+// Audit + application logs
+// ---------------------------------------------------------------------------
+
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  EMAIL_VERIFIED
+  ACCOUNT_CREATED
+  ACCOUNT_UPDATED
+  ACCOUNT_DISABLED
+  ACCOUNT_ENABLED
+  ACCOUNT_DELETED
+  ROLE_CREATED
+  ROLE_UPDATED
+  ROLE_DELETED
+  ROLE_GRANTED
+  ROLE_REVOKED
+  PERMISSION_CREATED
+  PERMISSION_DELETED
+  PERMISSION_ASSIGNED
+  PERMISSION_REVOKED
+  ADMIN_INVITED
+  RESOURCE_ACCESSED
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+}
+
+model AuditLog {
+  id             String      @id @default(uuid())
+  actorAccountId String?
+  actorEmail     String?
+  action         AuditAction
+  resource       String?
+  resourceId     String?
+  status         AuditStatus
+  ipAddress      String?
+  userAgent      String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  archivedAt     DateTime?
+
+  actor Account? @relation("ActorAccount", fields: [actorAccountId], references: [id], onDelete: SetNull)
+
+  @@index([actorAccountId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([archivedAt])
+  @@map("audit_logs")
+}
+
+model LoginOtp {
+  id        String     @id @default(uuid())
+  accountId String
+  code      String
+  channel   OtpChannel
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int        @default(0)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime   @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("login_otps")
+}
+
+model File {
+  id         String    @id @default(uuid())
+  accountId  String
+  storageKey String    @unique
+  filename   String
+  mimeType   String
+  size       Int
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([deletedAt])
+  @@map("files")
+}
+
+model Log {
+  id         String    @id @default(uuid())
+  level      String
+  message    String
+  context    String?
+  trace      String?
+  meta       String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  archivedAt DateTime?
+
+  @@index([level])
+  @@index([createdAt])
+  @@index([archivedAt])
+  @@index([deletedAt])
+  @@map("logs")
+}
+
+// ---------------------------------------------------------------------------
+// Read-only views (created via raw SQL in the migration)
+// ---------------------------------------------------------------------------
+
+view PublicUser {
+  id        String   @unique
+  email     String
+  isActive  Boolean
+  firstName String?
+  lastName  String?
+  avatar    String?
+  bio       String?
+  createdAt DateTime
+
+  @@map("public_users")
+}
+
+view AdminDirectory {
+  id          String      @unique
+  email       String
+  kind        AccountKind
+  isActive    Boolean
+  lastLoginAt DateTime?
+  firstName   String?
+  lastName    String?
+
+  @@map("admin_directory")
+}

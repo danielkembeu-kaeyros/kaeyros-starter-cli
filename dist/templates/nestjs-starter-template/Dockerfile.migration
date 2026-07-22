@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+RUN npm install -g ts-node typescript
+
+COPY prisma ./prisma
+COPY tsconfig.json ./
+RUN npx prisma generate
+
+COPY scripts/run-migrations.sh ./scripts/
+RUN chmod +x ./scripts/run-migrations.sh
+
+# DATABASE_URL doit être défini via Kubernetes Secret ou ConfigMap
+CMD ["sh", "./scripts/run-migrations.sh"]

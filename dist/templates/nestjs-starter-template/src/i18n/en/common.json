@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "NestJS Starter",
+    "welcome": "Welcome to NestJS Starter"
+  },
+  "errors": {
+    "internalServerError": "Internal server error",
+    "notFound": "Resource not found",
+    "unauthorized": "Unauthorized access",
+    "forbidden": "Forbidden access",
+    "badRequest": "Bad request",
+    "conflict": "Resource already exists",
+    "validationFailed": "Validation failed",
+    "tooManyRequests": "Too many requests, please try again later"
+  },
+  "validation": {
+    "isEmail": "Must be a valid email address",
+    "isString": "Must be a string",
+    "isNotEmpty": "Must not be empty",
+    "minLength": "Must be at least {min} characters long",
+    "maxLength": "Must be at most {max} characters long",
+    "isStrongPassword": "Password must contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character",
+    "matches": "Invalid format",
+    "isBoolean": "Must be a boolean value",
+    "isNumber": "Must be a number",
+    "min": "Must be at least {min}",
+    "max": "Must be at most {max}",
+    "isDate": "Must be a valid date"
+  },
+  "success": {
+    "created": "Created successfully",
+    "updated": "Updated successfully",
+    "deleted": "Deleted successfully",
+    "operationSuccessful": "Operation completed successfully"
+  }
+}
