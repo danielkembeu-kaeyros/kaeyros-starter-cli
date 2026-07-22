@@ -1,0 +1,1 @@
+{"version":3,"file":"system-check.d.ts","sourceRoot":"","sources":["../src/system-check.ts"],"names":[],"mappings":"AAGA,MAAM,WAAW,UAAU;IACzB,QAAQ,EAAE,MAAM,CAAC;IACjB,OAAO,EAAE,OAAO,CAAC;IACjB,MAAM,EAAE,OAAO,CAAC;IAChB,YAAY,EAAE,MAAM,GAAG,IAAI,CAAC;CAC7B;AAED,wBAAgB,WAAW,IAAI,UAAU,CAmBxC"}

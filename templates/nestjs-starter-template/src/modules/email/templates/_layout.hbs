@@ -1,0 +1,20 @@
+{{!--
+  Shared layout fragment for all transactional emails.
+  Embed it via Handlebars partials when feature renderer supports it; until
+  then each template inlines the same shell. The fragment is kept here as
+  the canonical visual reference so future templates stay consistent.
+
+  Palette (soft, modern):
+    Background:    #f5f6fa
+    Card:          #ffffff
+    Primary text:  #1f2937
+    Muted text:    #6b7280
+    Accent:        #6366f1   (indigo-500)
+    Accent hover:  #4f46e5   (indigo-600)
+    Code chip:     #f3f4f6
+    Border:        #e5e7eb
+
+  Layout:
+    600px max, 32px outer padding, 12px corner radius, soft 4–10px shadow.
+    System font stack so it inherits the OS look on any client.
+--}}

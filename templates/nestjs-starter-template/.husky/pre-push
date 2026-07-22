@@ -1,0 +1,31 @@
+echo "🚀 Running pre-push checks..."
+echo ""
+
+# Run linting
+echo "🔍 Running ESLint..."
+npm run lint || {
+  echo "❌ Linting failed. Please fix the errors before pushing."
+  exit 1
+}
+echo "✅ Linting passed!"
+echo ""
+
+# Run type checking
+echo "🔧 Running TypeScript type checking..."
+npm run typecheck || {
+  echo "❌ Type checking failed. Please fix the errors before pushing."
+  exit 1
+}
+echo "✅ Type checking passed!"
+echo ""
+
+# Run all tests
+echo "🧪 Running all tests..."
+npm run test:all || {
+  echo "❌ Tests failed. Please fix the failing tests before pushing."
+  exit 1
+}
+echo "✅ All tests passed!"
+echo ""
+
+echo "✨ All pre-push checks passed! Proceeding with push..."

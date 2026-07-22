@@ -1,0 +1,1332 @@
+{
+  "info": {
+    "name": "NestJS Starter API — E2E",
+    "description": "Automated smoke test of every endpoint.\n\nRun order matters: Auth core flow first (captures {{accessToken}}, transparently handles the seeded super-admin's forced first-login password change), then admin CRUD chains (permission → role → account), users, audit, files, cleanup.\n\nThe '99 Manual — emailed token flows' folder is skipped unless the environment variable runManual=true, because those endpoints need a token/code delivered by email (preview mode prints an Ethereal URL in the server logs).\n\nNote: the whole /auth surface is rate-limited to 10 requests/min — the automated flow stays under that, but avoid re-running the Auth folder repeatedly within a minute.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "accessToken", "value": "" },
+    { "key": "mustChangePassword", "value": "false" },
+    { "key": "permissionId", "value": "" },
+    { "key": "roleId", "value": "" },
+    { "key": "accountId", "value": "" },
+    { "key": "fileId", "value": "" },
+    { "key": "testUserEmail", "value": "" },
+    { "key": "registerEmail", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health check returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Auth — core flow",
+      "item": [
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login returns 200 with accessToken', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().accessToken).to.be.a('string');",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "pm.collectionVariables.set('mustChangePassword', String(json.user && json.user.mustChangePassword === true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/change-initial-password (first run only)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Only needed when the seeded super-admin still has mustChangePassword=true",
+                  "if (pm.collectionVariables.get('mustChangePassword') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Initial password changed', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  // From now on the working password is adminNewPassword — persist it",
+                  "  pm.environment.set('adminPassword', pm.variables.replaceIn('{{adminNewPassword}}'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"{{adminNewPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-initial-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-initial-password"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login (re-login after password change)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('mustChangePassword') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Re-login returns 200 with accessToken', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().accessToken).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);",
+                  "pm.collectionVariables.set('mustChangePassword', 'false');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "GET /auth/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Me returns the admin account', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().email.toLowerCase()).to.eql(pm.variables.replaceIn('{{adminEmail}}').toLowerCase());",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "POST /auth/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Refresh rotates the access token (cookie-based)', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().accessToken).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/register",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('registerEmail', `e2e.register.${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Register accepted (verification email queued)', () => {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registerEmail}}\",\n  \"password\": \"E2eTesting!2345\",\n  \"firstName\": \"E2e\",\n  \"lastName\": \"Register\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Admin · Permissions",
+      "item": [
+        {
+          "name": "POST /admin/permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('Permission created', () => pm.expect(pm.response.json().id).to.be.a('string'));",
+                  "  pm.collectionVariables.set('permissionId', pm.response.json().id);",
+                  "} else {",
+                  "  pm.test('Permission already exists from a previous run (409)', () => pm.response.to.have.status(409));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"e2etest:read\",\n  \"resource\": \"e2etest\",\n  \"action\": \"read\",\n  \"description\": \"Created by the Postman e2e collection — safe to delete\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "permissions"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Permissions list returns 200', () => pm.response.to.have.status(200));",
+                  "// Fallback: recover the id if create hit a 409 from an aborted previous run",
+                  "if (!pm.collectionVariables.get('permissionId')) {",
+                  "  const all = pm.response.json();",
+                  "  const rows = Array.isArray(all) ? all : (all.data || all.items || []);",
+                  "  const mine = rows.find(p => p.name === 'e2etest:read');",
+                  "  if (mine) pm.collectionVariables.set('permissionId', mine.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "permissions"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/permissions/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Permission fetched by id', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().name).to.eql('e2etest:read');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/permissions/{{permissionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "permissions", "{{permissionId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Admin · Roles",
+      "item": [
+        {
+          "name": "POST /admin/roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('Role created', () => pm.expect(pm.response.json().id).to.be.a('string'));",
+                  "  pm.collectionVariables.set('roleId', pm.response.json().id);",
+                  "} else {",
+                  "  pm.test('Role already exists from a previous run (409)', () => pm.response.to.have.status(409));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"E2E_TEST_ROLE\",\n  \"description\": \"Created by the Postman e2e collection — safe to delete\",\n  \"permissionIds\": [\"{{permissionId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Roles list returns 200', () => pm.response.to.have.status(200));",
+                  "if (!pm.collectionVariables.get('roleId')) {",
+                  "  const all = pm.response.json();",
+                  "  const rows = Array.isArray(all) ? all : (all.data || all.items || []);",
+                  "  const mine = rows.find(r => r.name === 'E2E_TEST_ROLE');",
+                  "  if (mine) pm.collectionVariables.set('roleId', mine.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/roles/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Role fetched with its permissions', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().name).to.eql('E2E_TEST_ROLE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles", "{{roleId}}"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /admin/roles/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Role updated', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated by the Postman e2e collection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles", "{{roleId}}"]
+            }
+          }
+        },
+        {
+          "name": "PUT /admin/roles/:id/permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Role permissions replaced', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionIds\": [\"{{permissionId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles/{{roleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles", "{{roleId}}", "permissions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Admin · Accounts",
+      "item": [
+        {
+          "name": "POST /admin/accounts",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('testUserEmail', `e2e.user.${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account created', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.json().id).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accountId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testUserEmail}}\",\n  \"kind\": \"USER\",\n  \"firstName\": \"E2e\",\n  \"lastName\": \"User\",\n  \"roleIds\": [\"{{roleId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Accounts list returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /admin/accounts/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Account fetched by id', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /admin/accounts/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Account updated', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"E2eUpdated\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}"]
+            }
+          }
+        },
+        {
+          "name": "PUT /admin/accounts/:id/roles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account roles replaced', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\"{{roleId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}", "roles"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/accounts/:id/disable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Account disabled', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}/disable",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}", "disable"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/accounts/:id/enable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Account re-enabled', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}/enable",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}", "enable"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Users",
+      "item": [
+        {
+          "name": "GET /users/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Own profile returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /users/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Own profile updated', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"Updated by the Postman e2e collection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "GET /users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Users directory returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /users/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The created USER may be filtered out of the public view until verified — accept 200 or 404",
+                  "pm.test('User lookup returns 200 (or 404 if the view filters unverified users)', () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{accountId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{accountId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Admin · Audit log",
+      "item": [
+        {
+          "name": "GET /admin/audit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Audit log returns 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "audit"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Files (needs S3 configured)",
+      "item": [
+        {
+          "name": "POST /files (upload)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  pm.test('File uploaded', () => pm.expect(pm.response.json().id).to.be.a('string'));",
+                  "  pm.collectionVariables.set('fileId', pm.response.json().id);",
+                  "} else {",
+                  "  pm.test('Upload failed — S3 is probably not configured (got ' + pm.response.code + ')', () => {",
+                  "    pm.expect([400, 500, 502, 503]).to.include(pm.response.code);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": "postman/sample.png" }]
+            },
+            "url": { "raw": "{{baseUrl}}/files", "host": ["{{baseUrl}}"], "path": ["files"] }
+          }
+        },
+        {
+          "name": "GET /files/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Own files list returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/files/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "me"]
+            }
+          }
+        },
+        {
+          "name": "GET /files/:id/download",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.collectionVariables.get('fileId')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Presigned download URL returned', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/files/{{fileId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "{{fileId}}", "download"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /files/:id",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.collectionVariables.get('fileId')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('File deleted', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('fileId', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/files/{{fileId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "{{fileId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Cleanup",
+      "item": [
+        {
+          "name": "DELETE /admin/accounts/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Test account deleted', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('accountId', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/accounts/{{accountId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "accounts", "{{accountId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/roles/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Test role deleted', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('roleId', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "roles", "{{roleId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /admin/permissions/:id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Test permission deleted', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('permissionId', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/permissions/{{permissionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "permissions", "{{permissionId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logged out', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('accessToken', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Manual — emailed token flows",
+      "description": "These endpoints need a token/code delivered by email (or SMS). With EMAIL_PREVIEW_MODE=true the server logs print an Ethereal preview URL for every email — grab the code/token there, fill manualEmail / manualToken / manualCode in the environment, set runManual=true, and run this folder.\n\nReminder: /auth is throttled at 10 requests/min.",
+      "item": [
+        {
+          "name": "POST /auth/resend-verification",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Always 200 (silent)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{manualEmail}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/resend-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "resend-verification"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/verify-email/code",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Email verified', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manualEmail}}\",\n  \"code\": \"{{manualCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email/code",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email", "code"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/verify-email/link",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Email verified', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{manualToken}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email/link",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email", "link"]
+            }
+          }
+        },
+        {
+          "name": "GET /auth/verify-email?token=…",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Email verified', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email?token={{manualToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email"],
+              "query": [{ "key": "token", "value": "{{manualToken}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/request-password-reset",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Always 200 (silent)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{manualEmail}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/request-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "request-password-reset"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/reset-password",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Password reset', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{manualToken}}\",\n  \"newPassword\": \"E2eTesting!2345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login/request-otp",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 200 when the account has OTP login enabled; 4xx otherwise",
+                  "pm.test('OTP requested (account must have loginMethod OTP or BOTH)', () => {",
+                  "  pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manualEmail}}\",\n  \"channel\": \"EMAIL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/request-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login", "request-otp"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login/verify-otp",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OTP login returns tokens', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manualEmail}}\",\n  \"code\": \"{{manualCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/change-password",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Manual only — changing the admin password here would invalidate the session mid-run",
+                  "if (pm.environment.get('runManual') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Password changed', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"{{adminNewPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-password"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "passwordReset": {
+    "subject": "Password Reset Request",
+    "greeting": "Hello {userName}",
+    "body": "We received a request to reset your password. Click the button below to create a new password:",
+    "button": "Reset Password",
+    "orCopy": "Or copy and paste this link into your browser:",
+    "securityNotice": "Security Notice:",
+    "expiryWarning": "This link will expire in {expiryTime}",
+    "oneTimeUse": "This link can only be used once",
+    "ignoreWarning": "If you didn't request this, please ignore this email",
+    "noRequestInfo": "If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.",
+    "footer": "This is an automated email, please do not reply.",
+    "copyright": "© {currentYear} NestJS Starter. All rights reserved."
+  },
+  "welcome": {
+    "subject": "Welcome to NestJS Starter",
+    "greeting": "Hello {userName}",
+    "thankYou": "Thank you for registering! We're excited to have you on board.",
+    "accountCreated": "Your account has been successfully created and you can now access all features of our platform.",
+    "getStartedButton": "Get Started",
+    "whatYouCanDo": "What you can do:",
+    "features": {
+      "dashboard": "Access your personalized dashboard",
+      "profile": "Manage your profile and settings",
+      "explore": "Explore all available features",
+      "connect": "Connect with other users"
+    },
+    "support": "If you have any questions or need assistance, feel free to reach out to our support team.",
+    "regards": "Best regards,",
+    "team": "The NestJS Starter Team",
+    "footer": "This is an automated email, please do not reply.",
+    "copyright": "© {currentYear} NestJS Starter. All rights reserved."
+  },
+  "emailVerification": {
+    "subject": "Verify Your Email Address",
+    "greeting": "Hello {userName}",
+    "thankYou": "Thank you for registering! To complete your registration and activate your account, please use the verification code below:",
+    "enterCode": "Enter this code in the verification page to activate your account.",
+    "importantNotice": "Important:",
+    "mustVerify": "You must verify your email to access all features",
+    "expiryWarning": "This verification code will expire in 24 hours",
+    "requestNew": "If the code expires, you can request a new one",
+    "ignoreWarning": "If you didn't create an account, you can safely ignore this email.",
+    "footer": "This is an automated email, please do not reply.",
+    "copyright": "© {currentYear} NestJS Starter. All rights reserved."
+  }
+}

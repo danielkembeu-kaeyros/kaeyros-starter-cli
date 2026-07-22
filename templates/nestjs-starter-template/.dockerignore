@@ -1,0 +1,87 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Testing
+coverage
+.nyc_output
+*.spec.ts
+*.spec.js
+test
+tests
+__tests__
+
+# Build
+dist
+build
+.next
+out
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs
+*.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Misc
+.husky
+.prettierrc
+.eslintrc.js
+eslint.config.js
+.prettierignore
+tsconfig*.json
+jest.config.js
+
+# Prisma (keep schema, ignore generated)
+node_modules/.prisma
+node_modules/@prisma
+
+# Temporary files
+tmp
+temp
+*.tmp
